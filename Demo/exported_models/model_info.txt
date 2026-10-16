@@ -1,0 +1,8 @@
+color_space: sRGB
+lut_dim: 33
+lut_channels: 3
+lut_dtype: float32
+classifier_input: [B, 3, H, W] float32 range [0,1]
+classifier_output: [B, 3] float32  (weights for LUT0, LUT1, LUT2)
+lut_layout: row-major [C=3][R=33][G=33][B=33]
+lut_formula: final_LUT = w0*LUT0 + w1*LUT1 + w2*LUT2
