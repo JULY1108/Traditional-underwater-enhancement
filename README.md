@@ -1,38 +1,113 @@
-# Traditional underwater enhancement
+# Traditional Underwater Enhancement
 
-C++17 / OpenCV 水下图像批量增强程序。
+水下图像与视频增强项目，使用 C++、OpenCV 和 OpenMP 实现传统增强处理，并提供基于 LibTorch 的 3D LUT 调色与自适应校准模块。
 
-当前实际启用的算法是 **逐通道 SmoothCLAHE → 通道归一化 → 带高光/暗部保护的联合百分位拉伸**。保留原有参数与实现；当前路径未启用物理去雾或神经网络。
+## 项目内容
 
-## 构建
+- **传统增强**：逐通道 SmoothCLAHE、通道归一化，以及带高光和暗部保护的联合百分位拉伸。
+- **3D LUT 调色**：通过分类器预测三个 LUT 的混合权重，使用三线性插值完成颜色映射，支持 CPU / CUDA 路径。
+- **自适应校准**：加载 TorchScript 模型进行 RGB 图像校准。
+- **测试示例**：`demo_video.cpp` 提供视频逐帧处理示例；`demo_TSA.cpp` 保留原始批量图片示例备份。
 
-需要 CMake 3.14+、C++17 编译器、OpenCV 4 和 OpenMP。Windows 建议使用 Visual Studio 2019 或更新版本的 x64 开发者命令行。
+当前 `Rank1PlusUnderwater::process()` 的实际处理链为：
 
-```sh
-cmake -S . -B build -DOpenCV_DIR="你的OpenCV配置目录"
-cmake --build build --config Release
+```text
+输入 BGR 图像 → 按比例缩放 → 逐通道 SmoothCLAHE
+             → 通道归一化 → 联合百分位拉伸 → 输出 BGR 图像
 ```
 
-Windows 运行前将 OpenCV DLL 所在的 bin 目录加入 PATH；Linux 同样需要可用的 OpenCV 动态库。
+当前实现未启用物理去雾步骤。模块名称沿用原代码命名。
 
-## 使用
+## 目录结构
 
-```sh
-# Windows 多配置构建
-build/Demo/Release/demo_images.exe input_images output_images
-# Linux 单配置构建
-./build/Demo/demo_images input_images output_images
+```text
+Traditional-underwater-enhancement/
+├── README.md
+├── CMakeLists.txt
+└── Demo/
+    ├── CMakeLists.txt
+    ├── demo_video.cpp                    # 视频测试示例
+    ├── demo_TSA.cpp                      # 批量图片示例备份（当前全部注释）
+    ├── dehaze_common.h                   # 传统增强接口
+    ├── dehaze_old.cpp                    # 当前传统增强实现
+    ├── smooth_clahe.h / .cpp             # 平滑 CLAHE
+    ├── lut_batch_processor.h / .cpp      # 3D LUT 调色模块
+    ├── adaptive_calibration_processor.h / .cpp
+    └── exported_models/                  # 已上传的模型与 LUT 数据
 ```
 
-输入为图片文件夹，支持 jpg/jpeg/png/bmp/tif/tiff（不递归），输出保留文件名。输出目录的父目录必须存在，输出目录本身必须不存在，避免覆盖已有图片。读取或写入失败返回非零状态；之前成功输出的图片保留。建议使用 ASCII 路径，Windows 上 OpenCV 对中文路径的支持取决于版本。
+## 环境依赖
 
-## 文件说明
+| 依赖 | 用途 |
+| --- | --- |
+| C++17 编译器 | `std::filesystem` 等语言与标准库功能 |
+| OpenCV 4 | 图像处理、视频读写和预览窗口 |
+| OpenMP | 并行处理 |
+| LibTorch | LUT 分类器与自适应校准模型推理 |
+| CUDA（可选） | 使用兼容的 GPU 版本 LibTorch 时加速推理 |
 
-- `Demo/demo_TSA.cpp`：批量处理入口，路径通过命令行传入。
-- `Demo/dehaze_old.cpp`：当前实际使用的增强实现，保留原文件名。
-- `Demo/dehaze_common.h`：增强接口。
-- `Demo/smooth_clahe.*`：平滑 CLAHE 实现。
-- `Demo/lut_batch_processor.*`、`Demo/adaptive_calibration_processor.*`：保留的可选 LibTorch 模块，默认构建不启用，需要另行准备匹配的模型和 LibTorch。
-- `Demo/exported_models/model_info.txt`：原 LUT 格式说明。模型权重不随本次源码上传。
+传统增强核心使用 OpenCV、OpenMP 和标准线程库。当前视频示例会构造 `Lut3DEnhance`，即使 LUT 调色调用被注释，仍需要配置 LibTorch 并提供对应模型文件。
 
-原 Visual Studio 工程和本机脚本含机器专属依赖路径，以此处 CMake 构建为准。全注释的历史文件、临时副本、编译产物、原始视频和输出图片未纳入发布源码。
+## 视频测试示例
+
+示例文件：[Demo/demo_video.cpp](Demo/demo_video.cpp)。
+
+运行前，在示例源码中按实际环境设置：
+
+| 变量 | 含义 |
+| --- | --- |
+| `input_video_path` | 输入视频的完整路径 |
+| `out_folder` | 输出视频目录 |
+| `enhance_video_name` | 输出视频文件名 |
+| `resize_scale` | 图像缩放比例，当前为 `1` |
+
+模型目录使用相对路径 `./exported_models`，因此运行时应将工作目录设为 `Demo`，或将 `exported_models` 放到程序工作目录下。路径配置写在源码中，当前示例不接收命令行路径参数。
+
+示例逐帧读取视频，调用传统增强接口，显示增强预览，并使用 `mp4v` 编码保存结果；按 `Esc` 可提前结束。运行时会输出逐帧耗时、处理进度和平均 FPS。视频读写需要 OpenCV 具备可用的视频编解码后端，预览需要图形界面环境。
+
+当前视频示例的 LUT 调色调用被注释，输出为传统增强结果；自适应校准模块未接入该示例。
+
+### 构建说明
+
+仓库当前的 CMake 配置仅包含传统增强库及指向 `demo_TSA.cpp` 的 `demo_images` 目标，**尚未配置视频示例的构建，也未链接 LibTorch**。由于图片示例备份全部被注释，直接构建 `demo_images` 会缺少 `main()`，不能作为开箱即用的运行方式。
+
+在自己的 C++ 工程中运行视频示例时，应选择 `demo_video.cpp` 作为唯一入口，并加入：
+
+```text
+Demo/demo_video.cpp
+Demo/dehaze_old.cpp
+Demo/smooth_clahe.cpp
+Demo/lut_batch_processor.cpp
+```
+
+配置 OpenCV、LibTorch、OpenMP 和线程库的头文件、链接库与运行时动态库路径。OpenCV 需要支持图像处理、视频读写和窗口显示；使用 CUDA 版 LibTorch 时还需匹配的 CUDA 运行环境。源码中部分文件使用 GBK 编码，编译器字符集设置需与实际文件编码匹配。
+
+## 批量图片示例
+
+[Demo/demo_TSA.cpp](Demo/demo_TSA.cpp) 按备份原样保留，当前整份文件处于注释状态。示例展示图片目录遍历、传统增强、3D LUT 调色、结果保存及耗时统计，支持 jpg、jpeg、png、bmp、tif 和 tiff。
+
+如需运行该示例，需要自行启用代码、配置其中的输入输出路径和依赖，并确保工程仅有一个有效的 `main()`。
+
+## 模型文件
+
+`Demo/exported_models` 已包含以下文件：
+
+| 文件 | 用途 |
+| --- | --- |
+| `classifier_sRGB.pt` | 预测三个 LUT 混合权重的分类器 |
+| `LUT0_sRGB.bin` | 第一个基础 LUT |
+| `LUT1_sRGB.bin` | 第二个基础 LUT |
+| `LUT2_sRGB.bin` | 第三个基础 LUT |
+| `LUT_identity_sRGB.bin` | 恒等 LUT 数据 |
+| `adaptive_calibration_exp001.ts.pt` | 自适应校准 TorchScript 模型 |
+| `model_info.txt` | LUT 数据布局与分类器输入输出说明 |
+
+LUT 使用 sRGB 色彩空间，尺寸为 `33 × 33 × 33`，包含三个通道，数据类型为 `float32`。分类器输入为 `[B, 3, H, W]`、范围 `[0, 1]` 的浮点张量，输出为三个混合权重：
+
+```text
+final_LUT = w0 × LUT0 + w1 × LUT1 + w2 × LUT2
+```
+
+## 当前验证范围
+
+传统增强核心此前通过了本机编译与合成图像检查。原始视频示例、LUT 模型及自适应校准模型尚未完成端到端运行验证；具体效果和速度取决于输入数据、硬件及依赖配置。
