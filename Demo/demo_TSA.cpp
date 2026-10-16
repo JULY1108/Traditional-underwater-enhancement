@@ -1,55 +1,102 @@
-#include <opencv2/opencv.hpp>
-#include "dehaze_common.h"
-#include <algorithm>
-#include <cctype>
-#include <stdexcept>
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <vector>
-
-namespace fs = std::filesystem;
-
-int main(int argc, char* argv[])
-{
-    if (argc != 3) {
-        std::cerr << "Usage: demo_images <input_directory> <new_output_directory>\n";
-        return 1;
-    }
-    try {
-        const fs::path input = fs::canonical(argv[1]);
-        const fs::path output = fs::absolute(argv[2]);
-        if (!fs::is_directory(input))
-            throw std::runtime_error("Input must be a directory.");
-        // Require a new directory to avoid overwriting existing images.
-        if (!fs::create_directory(output))
-            throw std::runtime_error("Output directory already exists.");
-        std::vector<fs::path> images;
-        for (const auto& entry : fs::directory_iterator(input)) {
-            if (!entry.is_regular_file()) continue;
-            std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
-                ext == ".bmp" || ext == ".tif" || ext == ".tiff")
-                images.push_back(entry.path());
-        }
-        if (images.empty()) throw std::runtime_error("No supported images found.");
-        std::sort(images.begin(), images.end());
-        Rank1PlusUnderwater enhancer;
-        for (const auto& image : images) {
-            const cv::Mat src = cv::imread(image.string());
-            if (src.empty()) throw std::runtime_error("Cannot read: " + image.string());
-            const cv::Mat result = enhancer.process(src, 1.0);
-            if (!cv::imwrite((output / image.filename()).string(), result))
-                throw std::runtime_error("Cannot write: " + image.filename().string());
-            std::cout << image.filename().string() << '\n';
-        }
-        std::cout << "Processed " << images.size() << " images.\n";
-        return 0;
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
-
+//#include <iostream>
+//#include <vector>
+//#include <iomanip>
+//#include <filesystem>
+//#include <chrono>
+//#include <omp.h>
+//
+//// 必须加 OpenCV 总头文件
+//#include <opencv2/opencv.hpp>
+//
+//// 引入拆分后的头文件
+//#include "dehaze_common.h"
+//#include "lut_batch_processor.h"
+//
+//
+//// 关键：OpenCV 所有类型都在 cv 命名空间
+//using namespace std;
+//using namespace cv;
+//namespace fs = std::filesystem;
+//
+//
+//int main()
+//{
+//    omp_set_num_threads(omp_get_max_threads());
+//
+//    Rank1PlusUnderwater dehazeObj;
+//    Lut3DEnhance Lut3Dobj("./exported_models");
+//
+//    string in_dir = "H:\\underwater_test_datasets_raw\\强哥_1";
+//    string out_dir = "H:\\underwater_test_datasets_raw\\强哥_2_result";
+//
+//    if (!fs::exists(out_dir))
+//        fs::create_directories(out_dir);
+//
+//    vector<string> img_paths;
+//    vector<string> exts = { "*.jpg","*.jpeg","*.png","*.bmp","*.tif","*.tiff" };
+//    for (auto& ext : exts)
+//    {
+//        vector<string> tmp;
+//        glob(in_dir + "/" + ext, tmp, false);
+//        img_paths.insert(img_paths.end(), tmp.begin(), tmp.end());
+//    }
+//
+//    if (img_paths.empty())
+//    {
+//        cout << "【错误】test_input文件夹未找到任何图片！" << endl;
+//        return -1;
+//    }
+//
+//    cout << "待处理图片总数：" << img_paths.size() << endl;
+//    cout << "OpenMP可用线程：" << omp_get_max_threads() << endl;
+//    cout << "输入目录：" << in_dir << "\n输出目录：" << out_dir << "\n" << endl;
+//
+//    double resize_scale = 0.5;     //缩放因子
+//    int total_frames = 0;
+//    double total_time_ms = 0.0;
+//    auto total_start = chrono::high_resolution_clock::now();
+//
+//    for (auto& img_path : img_paths)
+//    {
+//        auto t1 = chrono::high_resolution_clock::now();
+//        Mat src = imread(img_path);
+//        if (src.empty())
+//        {
+//            cout << "跳过损坏文件：" << img_path << endl;
+//            continue;
+//        }
+//
+//
+//
+//        Mat enhanced = dehazeObj.process(src, resize_scale);     //透水增强主函数
+//
+//        enhanced = Lut3Dobj.process(enhanced, cv::Size(0, 0)); //3D LUT调色    //主函数
+//
+//        fs::path p(img_path);
+//        string save_name = p.filename().string();
+//        string save_path = out_dir + "/" + save_name;
+//
+//        imwrite(save_path, enhanced);
+//
+//        auto t2 = chrono::high_resolution_clock::now();
+//        double cost_ms = chrono::duration<double, milli>(t2 - t1).count();
+//        total_time_ms += cost_ms;
+//        total_frames++;
+//
+//        cout << "[" << total_frames << "/" << img_paths.size() << "] "
+//            << save_name << " | 耗时:" << fixed << setprecision(2) << cost_ms << " ms" << endl;
+//    }
+//
+//    auto total_end = chrono::high_resolution_clock::now();
+//    double total_cost_s = chrono::duration<double>(total_end - total_start).count();
+//    double avg_ms = total_time_ms / total_frames;
+//
+//    cout << "\n==================== 批量处理完成 ====================" << endl;
+//    cout << "成功处理：" << total_frames << " 张" << endl;
+//    cout << "总耗时：" << fixed << setprecision(2) << total_cost_s << " s" << endl;
+//    cout << "单张平均耗时：" << fixed << setprecision(2) << avg_ms << " ms" << endl;
+//    cout << "结果全部保存至：" << out_dir << endl;
+//    cout << "======================================================" << endl;
+//
+//    return 0;
+//}
