@@ -11,7 +11,6 @@ C++17 / OpenCV 水下图像批量增强程序。
 ```sh
 cmake -S . -B build -DOpenCV_DIR="你的OpenCV配置目录"
 cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
 ```
 
 Windows 运行前将 OpenCV DLL 所在的 bin 目录加入 PATH；Linux 同样需要可用的 OpenCV 动态库。
@@ -33,7 +32,6 @@ build/Demo/Release/demo_images.exe input_images output_images
 - `Demo/dehaze_old.cpp`：当前实际使用的增强实现，保留原文件名。
 - `Demo/dehaze_common.h`：增强接口。
 - `Demo/smooth_clahe.*`：平滑 CLAHE 实现。
-- `_smoke_test/smoke_test.cpp`：生成模拟水下图像，检查输出尺寸、类型和非空状态。
 - `Demo/lut_batch_processor.*`、`Demo/adaptive_calibration_processor.*`：保留的可选 LibTorch 模块，默认构建不启用，需要另行准备匹配的模型和 LibTorch。
 - `Demo/exported_models/model_info.txt`：原 LUT 格式说明。模型权重不随本次源码上传。
 
